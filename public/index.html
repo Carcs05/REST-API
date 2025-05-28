@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>To-Do List</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+
+    .add-task {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    #new-task {
+      width: 60%;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #aaa;
+      border-radius: 4px 0 0 4px;
+    }
+
+    #add-btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 0 4px 4px 0;
+      cursor: pointer;
+    }
+
+    #add-btn:hover {
+      background-color: #218838;
+    }
+
+    .filter-btns {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .filter-btn {
+      padding: 8px 16px;
+      margin: 0 5px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .filter-btn.active {
+      background-color: #0056b3;
+    }
+
+    .todo-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: white;
+      border: 1px solid #ccc;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+
+    .todo-item.completed .todo-text {
+      text-decoration: line-through;
+      color: #999;
+    }
+
+    .todo-text {
+      flex: 1;
+      margin-left: 10px;
+      font-size: 16px;
+    }
+
+    .action-btns button {
+      margin-left: 10px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .edit-btn {
+      background-color: #ffc107;
+      color: white;
+    }
+
+    .delete-btn {
+      background-color: #dc3545;
+      color: white;
+    }
+
+    .edit-mode input {
+      flex: 1;
+      padding: 8px;
+      font-size: 16px;
+      margin-right: 10px;
+    }
+
+    .edit-mode button {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .save-btn {
+      background-color: #28a745;
+      color: white;
+    }
+
+    .cancel-btn {
+      background-color: #6c757d;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <h1>To-Do List</h1>
+
+  <div class="add-task">
+    <input type="text" id="new-task" placeholder="Add a new task...">
+    <button id="add-btn">Add Task</button>
+  </div>
+
+  <div class="filter-btns">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="pending">Pending</button>
+    <button class="filter-btn" data-filter="completed">Completed</button>
+  </div>
+
+  <div id="todo-list">
+    <!-- Todo items will be displayed here -->
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost/rest_api/api';
+
+
+    const newTaskInput = document.getElementById('new-task');
+    const addBtn = document.getElementById('add-btn');
+    const todoList = document.getElementById('todo-list');
+    const filterBtns = document.querySelectorAll('.filter-btn');
+
+    let currentFilter = 'all';
+    let editingId = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadTodos();
+
+      addBtn.addEventListener('click', addTodo);
+      newTaskInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') addTodo();
+      });
+
+      filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentFilter = btn.dataset.filter;
+          filterBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          loadTodos();
+        });
+      });
+    });
+
+    function loadTodos() {
+      fetch(`${API_BASE}/get-todos.php?status=${currentFilter}`)
+        .then(response => response.json())
+        .then(todos => renderTodos(todos))
+        .catch(error => console.error('Error loading todos:', error));
+    }
+
+    function renderTodos(todos) {
+      todoList.innerHTML = '';
+      if (todos.length === 0) {
+        todoList.innerHTML = '<p style="text-align: center; margin-top: 20px;">No tasks found</p>';
+        return;
+      }
+
+      todos.forEach(todo => {
+        const todoItem = document.createElement('div');
+        todoItem.className = `todo-item ${todo.status === 'completed' ? 'completed' : ''}`;
+        todoItem.dataset.id = todo.id;
+
+        if (editingId === todo.id) {
+          todoItem.innerHTML = `
+            <div class="edit-mode">
+              <input type="text" class="edit-input" value="${todo.task}">
+              <button class="save-btn">Save</button>
+              <button class="cancel-btn">Cancel</button>
+            </div>
+          `;
+          const saveBtn = todoItem.querySelector('.save-btn');
+          const cancelBtn = todoItem.querySelector('.cancel-btn');
+          const editInput = todoItem.querySelector('.edit-input');
+
+          saveBtn.addEventListener('click', () => saveTodo(todo.id, editInput.value));
+          cancelBtn.addEventListener('click', () => {
+            editingId = null;
+            loadTodos();
+          });
+        } else {
+          todoItem.innerHTML = `
+            <input type="checkbox" class="todo-checkbox" ${todo.status === 'completed' ? 'checked' : ''}>
+            <div class="todo-text">${todo.task}</div>
+            <div class="action-btns">
+              <button class="edit-btn">Edit</button>
+              <button class="delete-btn">Delete</button>
+            </div>
+          `;
+
+          const checkbox = todoItem.querySelector('.todo-checkbox');
+          const editBtn = todoItem.querySelector('.edit-btn');
+          const deleteBtn = todoItem.querySelector('.delete-btn');
+
+          checkbox.addEventListener('change', () => updateStatus(todo.id, checkbox.checked ? 'completed' : 'pending'));
+          editBtn.addEventListener('click', () => {
+            editingId = todo.id;
+            loadTodos();
+          });
+          deleteBtn.addEventListener('click', () => deleteTodo(todo.id));
+        }
+
+        todoList.appendChild(todoItem);
+      });
+    }
+
+    function addTodo() {
+      const task = newTaskInput.value.trim();
+      if (!task) return;
+
+      fetch(`${API_BASE}/add-todo.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task })
+      })
+      .then(response => response.json())
+      .then(data => {
+        newTaskInput.value = '';
+        loadTodos();
+      })
+      .catch(error => console.error('Error adding todo:', error));
+    }
+
+    function updateStatus(id, status) {
+      fetch(`${API_BASE}/update-status.php`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status })
+      })
+      .then(response => response.json())
+      .then(data => loadTodos())
+      .catch(error => console.error('Error updating status:', error));
+    }
+
+    function saveTodo(id, task) {
+      if (!task.trim()) return;
+
+      fetch(`${API_BASE}/edit-todo.php`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, task })
+      })
+      .then(response => response.json())
+      .then(data => {
+        editingId = null;
+        loadTodos();
+      })
+      .catch(error => console.error('Error saving todo:', error));
+    }
+
+    function deleteTodo(id) {
+      fetch(`${API_BASE}/delete-todo.php?id=${id}`, {
+        method: 'DELETE'
+      })
+      .then(response => response.json())
+      .then(data => loadTodos())
+      .catch(error => console.error('Error deleting todo:', error));
+    }
+  </script>
+</body>
+</html>
